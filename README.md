@@ -43,6 +43,26 @@ Useful flags:
 ./setup.sh --clone-dir "$HOME/tools/aimail" --bin-dir "$HOME/bin"
 ```
 
+## Local Setup (Repo Already Cloned)
+
+If you already have this repo checked out, use:
+
+```bash
+./setup-local.sh
+```
+
+This skips clone/pull and installs from your existing checkout.
+
+Examples:
+
+```bash
+# Install from current checkout to default ~/.local/bin
+./setup-local.sh
+
+# Install from a specific checkout and custom bin dir
+./setup-local.sh --repo-dir "$HOME/dev/aimail" --bin-dir "$HOME/bin"
+```
+
 ## Build Standalone Binary
 
 Build a native standalone executable (no Bun runtime required on the target machine):
