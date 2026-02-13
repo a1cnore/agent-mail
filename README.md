@@ -18,7 +18,7 @@ A CLI for sending mail via SMTP and receiving mail via IMAP polling.
 Use the setup script to install the bundled binary (`agentmail`) with no runtime command needed after install.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/a1cnore/aimail/main/setup.sh | bash
+curl -fsSL https://raw.githubusercontent.com/a1cnore/agent-mail/main/setup.sh | bash
 ```
 
 Installer behavior:
