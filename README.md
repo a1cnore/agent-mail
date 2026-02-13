@@ -16,6 +16,24 @@ A Bun + TypeScript CLI for sending mail via SMTP and receiving mail via IMAP pol
 bun install
 ```
 
+## Build Standalone Binary
+
+Build a native standalone executable (no Bun runtime required on the target machine):
+
+```bash
+bun run build:standalone
+```
+
+Output binary:
+
+- `dist/agentmail`
+
+Run it directly:
+
+```bash
+./dist/agentmail --help
+```
+
 ## Configure
 
 Create `~/.agentmail/.env` with these keys:
