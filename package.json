@@ -1,0 +1,31 @@
+{
+  "name": "agentmail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "agentmail": "./bin/agentmail"
+  },
+  "scripts": {
+    "start": "bun run src/cli.ts",
+    "dev": "bun run --watch src/cli.ts",
+    "build": "bun build ./src/cli.ts --outfile ./dist/cli.js --target bun",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "dotenv": "^16.4.5",
+    "imapflow": "^1.0.181",
+    "mailparser": "^3.7.2",
+    "nodemailer": "^6.9.16",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^22.10.2",
+    "@types/nodemailer": "^6.4.17",
+    "bun-types": "^1.3.9",
+    "typescript": "^5.7.2"
+  }
+}
