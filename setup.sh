@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_REPO_URL="https://github.com/a1cnore/aimail.git"
+DEFAULT_REPO_URL="https://github.com/a1cnore/agent-mail.git"
 DEFAULT_REPO_DIR="${HOME}/.local/src/aimail"
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
 
