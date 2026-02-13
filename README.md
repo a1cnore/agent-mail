@@ -11,6 +11,7 @@ A CLI for sending mail via SMTP and receiving mail via IMAP polling.
 - Saves sent messages locally to `~/.agentmail/sent`
 - Supports one-shot receive and long-running watch polling
 - Supports conversation queries by sender with optional sent-message merge
+- Supports receive hook script execution on every newly saved incoming mail
 
 ## Bundled Version (Recommended)
 
@@ -215,6 +216,48 @@ Example:
 ```bash
 agentmail conversation --sender "alice@example.com" --include-sent
 ```
+
+## Receive Hook
+
+If this file exists, it is executed for every newly saved incoming message:
+
+- `~/.agentmail/hooks/on_recieve.sh`
+
+This runs for both:
+
+- `agentmail receive once`
+- `agentmail receive watch`
+
+Create hook file:
+
+```bash
+mkdir -p ~/.agentmail/hooks
+cat > ~/.agentmail/hooks/on_recieve.sh <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "new mail: $AGENTMAIL_MESSAGE_SUBJECT from $AGENTMAIL_MESSAGE_FROM"
+EOF
+chmod +x ~/.agentmail/hooks/on_recieve.sh
+```
+
+Hook environment variables:
+
+- `AGENTMAIL_HOOK_EVENT` (`on_recieve`)
+- `AGENTMAIL_MAILBOX`
+- `AGENTMAIL_MESSAGE_UID`
+- `AGENTMAIL_MESSAGE_ID`
+- `AGENTMAIL_MESSAGE_SUBJECT`
+- `AGENTMAIL_MESSAGE_FROM`
+- `AGENTMAIL_MESSAGE_TO`
+- `AGENTMAIL_MESSAGE_SAVED_AT`
+- `AGENTMAIL_MESSAGE_DATE`
+- `AGENTMAIL_MESSAGE_DIR`
+- `AGENTMAIL_MESSAGE_METADATA_FILE`
+
+Notes:
+
+- Hook failures are logged as warnings and do not stop mail processing.
+- The message is still marked as seen after successful local save.
 
 ## Setup Script Reference
 
