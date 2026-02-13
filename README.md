@@ -1,6 +1,6 @@
 # AgentMail CLI
 
-A Bun + TypeScript CLI for sending mail via SMTP and receiving mail via IMAP polling.
+A CLI for sending mail via SMTP and receiving mail via IMAP polling.
 
 ## Features
 
@@ -10,80 +10,40 @@ A Bun + TypeScript CLI for sending mail via SMTP and receiving mail via IMAP pol
 - Saves each received message and attachments to `~/.agentmail/messages`
 - Supports one-shot receive and long-running watch polling
 
-## Install
+## Bundled Version (Recommended)
 
-```bash
-bun install
-```
-
-## One-Command Setup (Clone + Build + PATH)
-
-You can run the setup script from any machine to clone, build, and install `agentmail`:
+Use the setup script to install the bundled binary (`agentmail`) with no runtime command needed after install.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/a1cnore/aimail/main/setup.sh | bash
 ```
 
-What it does:
+Installer behavior:
 
-- Clones (or updates) the repo to `~/.local/src/aimail`
-- Runs `bun install`
-- Builds standalone binary (`dist/agentmail`)
-- Installs binary to `~/.local/bin/agentmail`
-- Adds `~/.local/bin` to PATH in your shell rc file (if needed)
+- Clones/updates repo at `~/.local/src/aimail`
+- Builds bundled binary `dist/agentmail`
+- Installs to `~/.local/bin/agentmail`
+- Adds `~/.local/bin` to PATH (if needed)
 - Creates `~/.agentmail/.env` from `.env.example` if missing
 
-Useful flags:
+If repo is already cloned:
 
 ```bash
-# Use current local checkout, skip clone/pull:
-./setup.sh --repo-dir "$(pwd)"
-
-# Custom install location:
-./setup.sh --clone-dir "$HOME/tools/aimail" --bin-dir "$HOME/bin"
-```
-
-## Local Setup (Repo Already Cloned)
-
-If you already have this repo checked out, use:
-
-```bash
+cd /path/to/aimail
 ./setup-local.sh
 ```
 
-This skips clone/pull and installs from your existing checkout.
-
-Examples:
+## Manual Build (Bundled Binary)
 
 ```bash
-# Install from current checkout to default ~/.local/bin
-./setup-local.sh
-
-# Install from a specific checkout and custom bin dir
-./setup-local.sh --repo-dir "$HOME/dev/aimail" --bin-dir "$HOME/bin"
-```
-
-## Build Standalone Binary
-
-Build a native standalone executable (no Bun runtime required on the target machine):
-
-```bash
+bun install
 bun run build:standalone
-```
-
-Output binary:
-
-- `dist/agentmail`
-
-Run it directly:
-
-```bash
 ./dist/agentmail --help
 ```
 
-## Configure
+## Configuration
 
-Create `~/.agentmail/.env` with these keys:
+Create `~/.agentmail/.env` with:
 
 - `AGENTMAIL_EMAIL`
 - `SMTP_HOST`
@@ -97,47 +57,176 @@ Create `~/.agentmail/.env` with these keys:
 - `IMAP_USER`
 - `IMAP_PASS`
 
-You can copy values from `.env.example`.
+Template source: `.env.example`
 
-## Usage
-
-Validate config:
+## Quick Usage
 
 ```bash
-bun run src/cli.ts config validate
+agentmail config validate
+agentmail receive setup --mailbox INBOX --interval 60
+agentmail receive watch
 ```
 
-Send email:
+## Command Reference
+
+### `agentmail` (top-level)
 
 ```bash
-bun run src/cli.ts send \
+agentmail [options] [command]
+```
+
+Options:
+
+- `-V, --version`
+- `-h, --help`
+
+Commands:
+
+- `send [options]`
+- `receive`
+- `config`
+- `help [command]`
+
+### `agentmail send`
+
+```bash
+agentmail send --to <list> --subject <text> [options]
+```
+
+Options:
+
+- `--to <list>` (required): comma-separated recipient addresses
+- `--subject <text>` (required): message subject
+- `--cc <list>`: comma-separated cc addresses
+- `--bcc <list>`: comma-separated bcc addresses
+- `--text <text>`: plain-text body
+- `--html <html>`: HTML body
+- `--attach <path>`: attachment file path (repeatable)
+- `-h, --help`
+
+Notes:
+
+- At least one of `--text` or `--html` must be provided.
+
+Example:
+
+```bash
+agentmail send \
   --to "to@example.com,other@example.com" \
   --subject "Test" \
   --text "Hello" \
   --attach ./report.pdf
 ```
 
-Set polling defaults (`INBOX`, 60s if omitted):
+### `agentmail receive`
 
 ```bash
-bun run src/cli.ts receive setup --mailbox INBOX --interval 60
+agentmail receive [command]
 ```
 
-Receive once:
+Subcommands:
+
+- `setup [options]`
+- `once [options]`
+- `watch`
+- `help [command]`
+
+### `agentmail receive setup`
 
 ```bash
-bun run src/cli.ts receive once
+agentmail receive setup [--mailbox <name>] [--interval <seconds>]
 ```
 
-Watch receive loop:
+Options:
+
+- `--mailbox <name>`: IMAP mailbox name (default: `INBOX`)
+- `--interval <seconds>`: polling interval (default: `60`)
+- `-h, --help`
+
+Writes `~/.agentmail/polling.json`.
+
+### `agentmail receive once`
 
 ```bash
-bun run src/cli.ts receive watch
+agentmail receive once [--mailbox <name>]
 ```
+
+Options:
+
+- `--mailbox <name>`: IMAP mailbox name (overrides saved polling mailbox)
+- `-h, --help`
+
+### `agentmail receive watch`
+
+```bash
+agentmail receive watch
+```
+
+Options:
+
+- `-h, --help`
+
+Behavior:
+
+- Loads polling config from `~/.agentmail/polling.json`
+- Runs receive loop continuously until interrupted (`Ctrl+C`)
+
+### `agentmail config`
+
+```bash
+agentmail config [command]
+```
+
+Subcommands:
+
+- `validate`
+- `help [command]`
+
+### `agentmail config validate`
+
+```bash
+agentmail config validate
+```
+
+Options:
+
+- `-h, --help`
+
+## Setup Script Reference
+
+### `setup.sh`
+
+```bash
+./setup.sh [options]
+```
+
+Options:
+
+- `--repo-url <url>`
+- `--repo-dir <path>`
+- `--clone-dir <path>`
+- `--bin-dir <path>`
+- `--skip-path`
+- `--skip-env-template`
+- `-h, --help`
+
+### `setup-local.sh`
+
+```bash
+./setup-local.sh [options]
+```
+
+Options:
+
+- `--repo-dir <path>`
+- `--bin-dir <path>`
+- `--skip-path`
+- `--skip-env-template`
+- `-h, --help`
 
 ## Local Storage Layout
 
-Received messages are saved under:
+Received messages are stored under:
 
 - `~/.agentmail/messages/<timestamp>_uid-<uid>/metadata.json`
 - `~/.agentmail/messages/<timestamp>_uid-<uid>/body.txt`
