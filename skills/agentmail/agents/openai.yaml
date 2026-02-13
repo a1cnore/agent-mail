@@ -1,0 +1,4 @@
+interface:
+  display_name: "AgentMail"
+  short_description: "Operate AgentMail CLI end-to-end workflows"
+  default_prompt: "Use $agentmail to run full AgentMail CLI workflows, including setup, send, receive, hooks, and conversation queries."
