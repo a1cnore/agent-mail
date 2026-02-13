@@ -23,7 +23,7 @@ curl -fsSL https://raw.githubusercontent.com/a1cnore/agent-mail/main/setup.sh | 
 
 Installer behavior:
 
-- Clones/updates repo at `~/.local/src/aimail`
+- Clones/updates repo at `~/.local/src/agentmail`
 - Builds bundled binary `dist/agentmail`
 - Installs to `~/.local/bin/agentmail`
 - Adds `~/.local/bin` to PATH (if needed)
@@ -32,7 +32,7 @@ Installer behavior:
 If repo is already cloned:
 
 ```bash
-cd /path/to/aimail
+cd /path/to/agent-mail
 ./setup-local.sh
 ```
 
