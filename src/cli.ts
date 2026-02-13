@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { mkdir } from "node:fs/promises";
 import { Command, InvalidArgumentError } from "commander";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { AGENTMAIL_DIR } from "./config/paths";
 import { validateEnvFile } from "./config/env";
 import { writePollingConfig } from "./config/polling";
@@ -9,11 +9,21 @@ import { receiveOnce, resolveMailboxForReceive } from "./receive/receiveOnce";
 import { watchLoop } from "./receive/watchLoop";
 import { parseAddressList, sendMail } from "./send/sendMail";
 import { consoleLogger } from "./types";
+import { queryConversation } from "./conversation/queryConversation";
 
 function parseInterval(value: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isInteger(parsed) || parsed < 1) {
     throw new InvalidArgumentError("Interval must be an integer greater than 0.");
+  }
+
+  return parsed;
+}
+
+function parsePositiveInteger(value: string): number {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new InvalidArgumentError("Value must be an integer greater than 0.");
   }
 
   return parsed;
@@ -154,6 +164,43 @@ async function run(): Promise<void> {
         }
 
         process.exitCode = 1;
+      })
+    );
+
+  program
+    .command("conversation")
+    .description("Query locally saved conversation messages by sender")
+    .requiredOption("--sender <email>", "Sender email address")
+    .option("--include-sent", "Include locally saved sent messages addressed to sender")
+    .option("--limit <count>", "Maximum number of entries", parsePositiveInteger)
+    .option("--json", "Print raw JSON result")
+    .action(
+      withErrorHandling(async (options) => {
+        const sender = z.string().trim().email().parse(options.sender).toLowerCase();
+        const entries = await queryConversation({
+          sender,
+          includeSent: Boolean(options.includeSent),
+          limit: options.limit
+        });
+
+        if (options.json) {
+          console.log(JSON.stringify(entries, null, 2));
+          return;
+        }
+
+        if (entries.length === 0) {
+          consoleLogger.info(`No conversation entries found for ${sender}.`);
+          return;
+        }
+
+        console.log(`Conversation entries for ${sender}: ${entries.length}`);
+        for (const entry of entries) {
+          const timestamp = entry.date ?? entry.savedAt;
+          const subject = entry.subject ?? "(no subject)";
+          console.log(
+            `- [${entry.direction}] ${timestamp} | ${subject} | from=${entry.from.join(", ")} | to=${entry.to.join(", ")} | dir=${entry.messageDir}`
+          );
+        }
       })
     );
 

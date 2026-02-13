@@ -8,7 +8,9 @@ A CLI for sending mail via SMTP and receiving mail via IMAP polling.
 - Sends mail with `nodemailer`
 - Polls IMAP inbox with `imapflow`
 - Saves each received message and attachments to `~/.agentmail/messages`
+- Saves sent messages locally to `~/.agentmail/sent`
 - Supports one-shot receive and long-running watch polling
+- Supports conversation queries by sender with optional sent-message merge
 
 ## Bundled Version (Recommended)
 
@@ -65,6 +67,7 @@ Template source: `.env.example`
 agentmail config validate
 agentmail receive setup --mailbox INBOX --interval 60
 agentmail receive watch
+agentmail conversation --sender "alice@example.com" --include-sent
 ```
 
 ## Command Reference
@@ -85,6 +88,7 @@ Commands:
 - `send [options]`
 - `receive`
 - `config`
+- `conversation [options]`
 - `help [command]`
 
 ### `agentmail send`
@@ -192,6 +196,26 @@ Options:
 
 - `-h, --help`
 
+### `agentmail conversation`
+
+```bash
+agentmail conversation --sender <email> [options]
+```
+
+Options:
+
+- `--sender <email>` (required): sender email to query from received mail
+- `--include-sent`: also include locally stored sent messages where recipient matches sender
+- `--limit <count>`: limit number of returned entries
+- `--json`: output machine-readable JSON
+- `-h, --help`
+
+Example:
+
+```bash
+agentmail conversation --sender "alice@example.com" --include-sent
+```
+
 ## Setup Script Reference
 
 ### `setup.sh`
@@ -233,3 +257,10 @@ Received messages are stored under:
 - `~/.agentmail/messages/<timestamp>_uid-<uid>/body.html`
 - `~/.agentmail/messages/<timestamp>_uid-<uid>/raw.eml`
 - `~/.agentmail/messages/<timestamp>_uid-<uid>/attachments/*`
+
+Sent messages are stored under:
+
+- `~/.agentmail/sent/<timestamp>_msg-<id>/metadata.json`
+- `~/.agentmail/sent/<timestamp>_msg-<id>/body.txt`
+- `~/.agentmail/sent/<timestamp>_msg-<id>/body.html`
+- `~/.agentmail/sent/<timestamp>_msg-<id>/attachments/*`
