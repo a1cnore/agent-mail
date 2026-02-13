@@ -16,6 +16,33 @@ A Bun + TypeScript CLI for sending mail via SMTP and receiving mail via IMAP pol
 bun install
 ```
 
+## One-Command Setup (Clone + Build + PATH)
+
+You can run the setup script from any machine to clone, build, and install `agentmail`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/a1cnore/aimail/main/setup.sh | bash
+```
+
+What it does:
+
+- Clones (or updates) the repo to `~/.local/src/aimail`
+- Runs `bun install`
+- Builds standalone binary (`dist/agentmail`)
+- Installs binary to `~/.local/bin/agentmail`
+- Adds `~/.local/bin` to PATH in your shell rc file (if needed)
+- Creates `~/.agentmail/.env` from `.env.example` if missing
+
+Useful flags:
+
+```bash
+# Use current local checkout, skip clone/pull:
+./setup.sh --repo-dir "$(pwd)"
+
+# Custom install location:
+./setup.sh --clone-dir "$HOME/tools/aimail" --bin-dir "$HOME/bin"
+```
+
 ## Build Standalone Binary
 
 Build a native standalone executable (no Bun runtime required on the target machine):

@@ -193,6 +193,6 @@ append_path_if_needed "${BIN_DIR}"
 echo ""
 echo "Setup complete."
 echo "Run: agentmail --help"
-if ! path_contains_entry "${BIN_DIR}"; then
+if [ "${SKIP_PATH}" -eq 0 ] && ! path_contains_entry "${BIN_DIR}"; then
   echo "Open a new shell or run: source $(shell_rc_file)"
 fi
