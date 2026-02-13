@@ -10,6 +10,7 @@
     "start": "bun run src/cli.ts",
     "dev": "bun run --watch src/cli.ts",
     "build": "bun build ./src/cli.ts --outfile ./dist/cli.js --target bun",
+    "build:standalone": "mkdir -p dist && bun build --compile ./src/cli.ts --outfile ./dist/agentmail",
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
