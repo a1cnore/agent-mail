@@ -5,6 +5,7 @@ import { consoleLogger } from "../types";
 import { loadMailEnvConfig } from "../config/env";
 import { DEFAULT_POLLING_CONFIG, tryReadPollingConfig } from "../config/polling";
 import { saveMessage } from "./saveMessage";
+import { runOnRecieveHook } from "../hooks/runOnRecieveHook";
 
 export interface ReceiveOnceOptions {
   mailbox?: string;
@@ -125,12 +126,27 @@ export async function receiveOnce(options: ReceiveOnceOptions = {}): Promise<Rec
           throw new Error(`Unable to resolve UID for message ${String(sequenceId)}.`);
         }
 
-        await saveMessage({
+        const saveResult = await saveMessage({
           uid,
           raw: rawBuffer,
           parsed: parsedMessage,
           flags: normalizeFlags(fetchedMessage.flags)
         });
+
+        try {
+          const hookResult = await runOnRecieveHook({
+            mailbox,
+            messageDir: saveResult.messageDir,
+            metadata: saveResult.metadata
+          });
+
+          if (hookResult.executed) {
+            logger.info(`Ran hook for message uid=${uid}`);
+          }
+        } catch (error) {
+          const hookErrorMessage = error instanceof Error ? error.message : String(error);
+          logger.warn(`Hook failed for message uid=${uid}: ${hookErrorMessage}`);
+        }
 
         await imapClient.messageFlagsAdd(sequenceId, ["\\Seen"]);
         saved += 1;
