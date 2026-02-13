@@ -5,6 +5,7 @@ import nodemailer from "nodemailer";
 import { z } from "zod";
 import type { Logger } from "../types";
 import { loadMailEnvConfig } from "../config/env";
+import { saveSentMessage } from "./saveSentMessage";
 
 const recipientSchema = z.string().trim().email();
 
@@ -81,6 +82,23 @@ export async function sendMail(input: SendMailInput, logger: Logger): Promise<{ 
       path: path.resolve(attachmentPath)
     }))
   });
+
+  try {
+    await saveSentMessage({
+      messageId: result.messageId ?? null,
+      from: envConfig.email,
+      to: parsedInput.to,
+      cc: parsedInput.cc,
+      bcc: parsedInput.bcc,
+      subject: parsedInput.subject,
+      text: parsedInput.text,
+      html: parsedInput.html,
+      attachmentPaths: parsedInput.attachments
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`Message sent but failed to persist sent mail locally: ${message}`);
+  }
 
   logger.info(`Sent message ${result.messageId}`);
   return { messageId: result.messageId };

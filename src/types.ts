@@ -40,6 +40,31 @@ export interface SavedMessageMetadata {
   attachments: SavedAttachmentMetadata[];
 }
 
+export interface SavedSentMessageMetadata {
+  messageId: string | null;
+  from: string[];
+  to: string[];
+  cc: string[];
+  bcc: string[];
+  subject: string | null;
+  date: string | null;
+  savedAt: string;
+  attachments: SavedAttachmentMetadata[];
+}
+
+export interface ConversationEntry {
+  direction: "received" | "sent";
+  messageId: string | null;
+  from: string[];
+  to: string[];
+  cc?: string[];
+  bcc?: string[];
+  subject: string | null;
+  date: string | null;
+  savedAt: string;
+  messageDir: string;
+}
+
 export interface Logger {
   info(message: string): void;
   warn(message: string): void;
