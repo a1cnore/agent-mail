@@ -6,6 +6,8 @@ import { ON_RECIEVE_HOOK_FILE } from "../config/paths";
 import type { SavedMessageMetadata } from "../types";
 
 export interface RunOnRecieveHookInput {
+  profileId: string;
+  accountEmail: string;
   mailbox: string;
   messageDir: string;
   metadata: SavedMessageMetadata;
@@ -73,12 +75,20 @@ export async function runOnRecieveHook(
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     AGENTMAIL_HOOK_EVENT: "on_recieve",
+    AGENTMAIL_PROFILE: input.profileId,
+    AGENTMAIL_ACCOUNT_EMAIL: input.accountEmail,
     AGENTMAIL_MAILBOX: input.mailbox,
     AGENTMAIL_MESSAGE_UID: String(input.metadata.uid),
     AGENTMAIL_MESSAGE_ID: stringifyNullable(input.metadata.messageId),
+    AGENTMAIL_MESSAGE_IN_REPLY_TO: stringifyNullable(input.metadata.inReplyTo),
+    AGENTMAIL_MESSAGE_REFERENCES: input.metadata.references.join(","),
     AGENTMAIL_MESSAGE_SUBJECT: stringifyNullable(input.metadata.subject),
     AGENTMAIL_MESSAGE_FROM: input.metadata.from.join(","),
     AGENTMAIL_MESSAGE_TO: input.metadata.to.join(","),
+    AGENTMAIL_MESSAGE_CC: input.metadata.cc.join(","),
+    AGENTMAIL_MESSAGE_BCC: input.metadata.bcc.join(","),
+    AGENTMAIL_MESSAGE_REPLY_TO: input.metadata.replyTo.join(","),
+    AGENTMAIL_NORMALIZED_FROM_EMAIL: stringifyNullable(input.metadata.normalizedSenderEmail),
     AGENTMAIL_MESSAGE_SAVED_AT: input.metadata.savedAt,
     AGENTMAIL_MESSAGE_DATE: stringifyNullable(input.metadata.date),
     AGENTMAIL_MESSAGE_DIR: input.messageDir,

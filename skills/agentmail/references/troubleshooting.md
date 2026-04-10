@@ -9,13 +9,13 @@ Symptoms:
 
 Causes:
 
-- Missing `~/.agentmail/.env`.
+- Missing active profile `.env` (for example `~/.agentmail/.env` or `~/.agentmail/profiles/<profile>/.env`).
 - Empty required values.
 - Invalid types (for example `SMTP_SECURE=yes` instead of `true`/`false`).
 
 Actions:
 
-1. Recreate or fix `~/.agentmail/.env` with all required keys.
+1. Recreate or fix active profile `.env` with all required keys.
 2. Ensure secure flags are exactly `true` or `false`.
 3. Ensure port values are integers.
 4. Re-run:
@@ -50,7 +50,7 @@ Symptoms:
 
 Cause:
 
-- `~/.agentmail/polling.json` has not been created.
+- Active profile `polling.json` has not been created.
 
 Actions:
 
@@ -85,6 +85,10 @@ ps -p <pid>
 ```bash
 rm -f ~/.agentmail/receive-watch.lock
 ```
+For named profile `work`:
+```bash
+rm -f ~/.agentmail/profiles/work/receive-watch.lock
+```
 4. Restart watch:
 ```bash
 agentmail receive watch
@@ -111,6 +115,10 @@ Actions:
 ```bash
 ls -la ~/.agentmail/hooks/on_recieve.sh
 ```
+For named profile `work`:
+```bash
+ls -la ~/.agentmail/profiles/work/hooks/on_recieve.sh
+```
 2. Test script manually with a controlled environment.
 3. Add strict shell options and logging in hook.
 
@@ -134,8 +142,8 @@ Actions:
 agentmail conversation --sender "alice@example.com" --include-sent --json
 ```
 3. Inspect local metadata under:
-- `~/.agentmail/messages/*/metadata.json`
-- `~/.agentmail/sent/*/metadata.json`
+- active profile `messages/*/metadata.json`
+- active profile `sent/*/metadata.json`
 
 ## Receive Finds No New Mail
 

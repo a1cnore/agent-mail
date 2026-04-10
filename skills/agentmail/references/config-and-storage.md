@@ -2,9 +2,10 @@
 
 ## Required Environment File
 
-Path:
+Path (active profile):
 
-- `~/.agentmail/.env`
+- Default profile: `~/.agentmail/.env`
+- Named profile: `~/.agentmail/profiles/<profile>/.env` (when using `--profile <profile>`)
 
 Required keys:
 
@@ -32,18 +33,22 @@ Base directory:
 
 - `~/.agentmail`
 
-Primary artifacts:
+Named profile root:
 
-- `~/.agentmail/.env`: runtime credentials/config.
-- `~/.agentmail/polling.json`: receive watch config.
-- `~/.agentmail/messages/`: saved inbound messages.
-- `~/.agentmail/sent/`: saved outbound messages.
-- `~/.agentmail/hooks/on_recieve.sh`: optional receive hook script.
-- `~/.agentmail/receive-watch.lock`: single-instance lock for watch mode.
+- `~/.agentmail/profiles/<profile>`
+
+Primary artifacts (active profile):
+
+- `.env`: runtime credentials/config.
+- `polling.json`: receive watch config.
+- `messages/`: saved inbound messages.
+- `sent/`: saved outbound messages.
+- `hooks/on_recieve.sh`: optional receive hook script.
+- `receive-watch.lock`: single-instance lock for watch mode.
 
 ## Polling Config Shape
 
-`~/.agentmail/polling.json`:
+`polling.json` (inside active profile root):
 
 ```json
 {
@@ -61,7 +66,7 @@ Constraints:
 
 Per message directory pattern:
 
-- `~/.agentmail/messages/<timestamp>_uid-<uid>`
+- `<active-profile-root>/messages/<timestamp>_uid-<uid>`
 
 Typical files:
 
@@ -98,7 +103,7 @@ Typical files:
 
 Per message directory pattern:
 
-- `~/.agentmail/sent/<timestamp>_msg-<sanitized-message-id>`
+- `<active-profile-root>/sent/<timestamp>_msg-<sanitized-message-id>`
 
 Typical files:
 
@@ -138,7 +143,7 @@ Typical files:
 
 ## Hook Runtime Variables
 
-When `~/.agentmail/hooks/on_recieve.sh` exists, AgentMail exports:
+When `<active-profile-root>/hooks/on_recieve.sh` exists, AgentMail exports:
 
 - `AGENTMAIL_HOOK_EVENT` (`on_recieve`)
 - `AGENTMAIL_MAILBOX`

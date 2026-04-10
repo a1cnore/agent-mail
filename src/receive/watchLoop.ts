@@ -6,6 +6,16 @@ import { readPollingConfig } from "../config/polling";
 import { RECEIVE_WATCH_LOCK_FILE } from "../config/paths";
 import { receiveOnce } from "./receiveOnce";
 
+export interface WatchLoopOptions {
+  profileId?: string;
+  pollingFilePath?: string;
+  lockFilePath?: string;
+  envFilePath?: string;
+  messagesDir?: string;
+  hookFilePath?: string;
+  databaseFile?: string;
+}
+
 function isProcessAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -73,9 +83,26 @@ function sleep(milliseconds: number): Promise<void> {
   });
 }
 
-export async function watchLoop(logger: Logger = consoleLogger): Promise<void> {
-  const pollingConfig = await readPollingConfig();
-  const releaseLock = await acquireWatchLock(RECEIVE_WATCH_LOCK_FILE);
+async function sleepUntilStopOrTimeout(
+  milliseconds: number,
+  shouldStop: () => boolean
+): Promise<void> {
+  const stepMilliseconds = 250;
+  let remainingMilliseconds = milliseconds;
+
+  while (remainingMilliseconds > 0 && !shouldStop()) {
+    const step = Math.min(stepMilliseconds, remainingMilliseconds);
+    await sleep(step);
+    remainingMilliseconds -= step;
+  }
+}
+
+export async function watchLoop(
+  logger: Logger = consoleLogger,
+  options: WatchLoopOptions = {}
+): Promise<void> {
+  const pollingConfig = await readPollingConfig(options.pollingFilePath);
+  const releaseLock = await acquireWatchLock(options.lockFilePath ?? RECEIVE_WATCH_LOCK_FILE);
   let shouldStop = false;
 
   const stop = (signal: NodeJS.Signals) => {
@@ -99,8 +126,13 @@ export async function watchLoop(logger: Logger = consoleLogger): Promise<void> {
     while (!shouldStop) {
       try {
         const result = await receiveOnce({
+          profileId: options.profileId,
           mailbox: pollingConfig.mailbox,
-          logger
+          logger,
+          envFilePath: options.envFilePath,
+          messagesDir: options.messagesDir,
+          hookFilePath: options.hookFilePath,
+          databaseFile: options.databaseFile
         });
 
         logger.info(
@@ -112,7 +144,7 @@ export async function watchLoop(logger: Logger = consoleLogger): Promise<void> {
       }
 
       if (!shouldStop) {
-        await sleep(pollingConfig.intervalSeconds * 1000);
+        await sleepUntilStopOrTimeout(pollingConfig.intervalSeconds * 1000, () => shouldStop);
       }
     }
   } finally {

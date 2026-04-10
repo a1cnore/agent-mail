@@ -2,16 +2,23 @@ import { access, copyFile, mkdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { SENT_MESSAGES_DIR } from "../config/paths";
 import type { SavedAttachmentMetadata, SavedSentMessageMetadata } from "../types";
+import { dedupeNormalizedEmails, normalizeEmail } from "../mail/address";
+import { normalizeMessageIdList } from "../mail/session";
 
 export interface SaveSentMessageInput {
+  profileId: string;
+  accountEmail: string;
   messageId: string | null;
   from: string;
   to: string[];
   cc: string[];
   bcc: string[];
+  replyTo?: string[];
   subject: string;
   text?: string;
   html?: string;
+  inReplyTo?: string | null;
+  references?: string[];
   attachmentPaths: string[];
 }
 
@@ -123,12 +130,22 @@ export async function saveSentMessage(
   }
 
   const metadata: SavedSentMessageMetadata = {
+    profileId: input.profileId,
+    accountEmail: input.accountEmail,
     messageId: input.messageId,
     from: [input.from],
+    fromEmails: [normalizeEmail(input.from)],
     to: input.to,
+    toEmails: dedupeNormalizedEmails(input.to),
     cc: input.cc,
+    ccEmails: dedupeNormalizedEmails(input.cc),
     bcc: input.bcc,
+    bccEmails: dedupeNormalizedEmails(input.bcc),
+    replyTo: input.replyTo ?? [],
+    replyToEmails: dedupeNormalizedEmails(input.replyTo ?? []),
     subject: input.subject,
+    inReplyTo: input.inReplyTo ?? null,
+    references: normalizeMessageIdList(input.references),
     date: now.toISOString(),
     savedAt: now.toISOString(),
     attachments: savedAttachments

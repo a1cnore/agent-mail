@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEFAULT_REPO_URL="https://github.com/a1cnore/agent-mail.git"
-DEFAULT_REPO_DIR="${HOME}/.local/src/aimail"
+DEFAULT_REPO_DIR="${HOME}/.local/src/agent-mail"
 DEFAULT_BIN_DIR="${HOME}/.local/bin"
 
 REPO_URL="${DEFAULT_REPO_URL}"
@@ -23,9 +23,9 @@ Usage:
   ./setup.sh [options]
 
 Options:
-  --repo-url <url>      Git repository URL (default: https://github.com/a1cnore/aimail.git)
+  --repo-url <url>      Git repository URL (default: https://github.com/a1cnore/agent-mail.git)
   --repo-dir <path>     Existing local repo to use (skip clone/pull)
-  --clone-dir <path>    Target clone directory when using --repo-url (default: ~/.local/src/aimail)
+  --clone-dir <path>    Target clone directory when using --repo-url (default: ~/.local/src/agent-mail)
   --bin-dir <path>      Install directory for binary (default: ~/.local/bin)
   --skip-path           Do not update shell rc file with PATH entry
   --skip-env-template   Do not copy .env.example to ~/.agentmail/.env when missing

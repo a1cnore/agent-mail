@@ -14,6 +14,12 @@ export const DEFAULT_POLLING_CONFIG: PollingConfig = {
   intervalSeconds: 60
 };
 
+function omitUndefinedValues<T extends object>(partial: Partial<T>): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(partial).filter(([, value]) => value !== undefined)
+  ) as Partial<T>;
+}
+
 export function parsePollingConfig(raw: unknown): PollingConfig {
   return pollingSchema.parse(raw);
 }
@@ -21,7 +27,7 @@ export function parsePollingConfig(raw: unknown): PollingConfig {
 export function applyPollingDefaults(partial: Partial<PollingConfig>): PollingConfig {
   return parsePollingConfig({
     ...DEFAULT_POLLING_CONFIG,
-    ...partial
+    ...omitUndefinedValues(partial)
   });
 }
 

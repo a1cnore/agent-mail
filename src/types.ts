@@ -28,11 +28,38 @@ export interface SavedAttachmentMetadata {
   relativePath: string;
 }
 
+export interface SavedAddressFields {
+  from: string[];
+  fromEmails: string[];
+  to: string[];
+  toEmails: string[];
+  cc: string[];
+  ccEmails: string[];
+  bcc: string[];
+  bccEmails: string[];
+  replyTo: string[];
+  replyToEmails: string[];
+}
+
 export interface SavedMessageMetadata {
+  profileId: string;
+  accountEmail: string;
+  mailbox: string;
   uid: number;
   messageId: string | null;
+  inReplyTo: string | null;
+  references: string[];
+  normalizedSenderEmail: string | null;
   from: string[];
+  fromEmails: string[];
   to: string[];
+  toEmails: string[];
+  cc: string[];
+  ccEmails: string[];
+  bcc: string[];
+  bccEmails: string[];
+  replyTo: string[];
+  replyToEmails: string[];
   subject: string | null;
   date: string | null;
   flags: string[];
@@ -41,12 +68,22 @@ export interface SavedMessageMetadata {
 }
 
 export interface SavedSentMessageMetadata {
+  profileId: string;
+  accountEmail: string;
   messageId: string | null;
   from: string[];
+  fromEmails: string[];
   to: string[];
+  toEmails: string[];
   cc: string[];
+  ccEmails: string[];
   bcc: string[];
+  bccEmails: string[];
+  replyTo: string[];
+  replyToEmails: string[];
   subject: string | null;
+  inReplyTo: string | null;
+  references: string[];
   date: string | null;
   savedAt: string;
   attachments: SavedAttachmentMetadata[];
@@ -54,15 +91,25 @@ export interface SavedSentMessageMetadata {
 
 export interface ConversationEntry {
   direction: "received" | "sent";
+  profileId: string;
+  sessionId: string | null;
   messageId: string | null;
   from: string[];
   to: string[];
   cc?: string[];
   bcc?: string[];
+  replyTo?: string[];
   subject: string | null;
+  inReplyTo?: string | null;
+  references?: string[];
   date: string | null;
   savedAt: string;
   messageDir: string;
+  attachments?: SavedAttachmentMetadata[];
+  dispatchStatus?: string;
+  dispatchAttempts?: number;
+  lastDispatchError?: string | null;
+  nextDispatchAt?: string | null;
 }
 
 export interface Logger {

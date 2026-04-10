@@ -16,6 +16,16 @@ describe("polling config", () => {
     expect(applied.intervalSeconds).toBe(DEFAULT_POLLING_CONFIG.intervalSeconds);
   });
 
+  it("ignores undefined partial values", () => {
+    const applied = applyPollingDefaults({
+      mailbox: undefined,
+      intervalSeconds: undefined
+    });
+
+    expect(applied.mailbox).toBe(DEFAULT_POLLING_CONFIG.mailbox);
+    expect(applied.intervalSeconds).toBe(DEFAULT_POLLING_CONFIG.intervalSeconds);
+  });
+
   it("writes and reads polling config", async () => {
     const tempRoot = await mkdtemp(path.join(os.tmpdir(), "agentmail-polling-"));
     const pollingFilePath = path.join(tempRoot, "polling.json");

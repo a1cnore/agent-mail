@@ -23,7 +23,7 @@ describe("queryConversation", () => {
         uid: 1,
         messageId: "r-1",
         from: ["Alice <alice@example.com>"],
-        to: ["agent@marvinkleinpass.dev"],
+        to: ["agent@example.test"],
         subject: "Hello",
         date: "2026-02-12T10:00:00.000Z",
         flags: [],
@@ -35,7 +35,7 @@ describe("queryConversation", () => {
         uid: 2,
         messageId: "r-2",
         from: ["Bob <bob@example.com>"],
-        to: ["agent@marvinkleinpass.dev"],
+        to: ["agent@example.test"],
         subject: "Ignore",
         date: "2026-02-12T11:00:00.000Z",
         flags: [],
@@ -45,7 +45,7 @@ describe("queryConversation", () => {
 
       await writeJsonFile(path.join(sentDir, "sent-1", "metadata.json"), {
         messageId: "s-1",
-        from: ["agent@marvinkleinpass.dev"],
+        from: ["agent@example.test"],
         to: ["alice@example.com"],
         cc: [],
         bcc: [],
@@ -56,6 +56,7 @@ describe("queryConversation", () => {
       });
 
       const withoutSent = await queryConversation({
+        profileId: "agent@example.test",
         sender: "alice@example.com",
         includeSent: false,
         messagesDir,
@@ -67,6 +68,7 @@ describe("queryConversation", () => {
       expect(withoutSent[0].messageId).toBe("r-1");
 
       const withSent = await queryConversation({
+        profileId: "agent@example.test",
         sender: "alice@example.com",
         includeSent: true,
         messagesDir,
@@ -94,7 +96,7 @@ describe("queryConversation", () => {
         uid: 1,
         messageId: "old",
         from: ["alice@example.com"],
-        to: ["agent@marvinkleinpass.dev"],
+        to: ["agent@example.test"],
         subject: "Old",
         date: "2026-02-10T10:00:00.000Z",
         flags: [],
@@ -106,7 +108,7 @@ describe("queryConversation", () => {
         uid: 2,
         messageId: "new",
         from: ["alice@example.com"],
-        to: ["agent@marvinkleinpass.dev"],
+        to: ["agent@example.test"],
         subject: "New",
         date: "2026-02-11T10:00:00.000Z",
         flags: [],
@@ -115,6 +117,7 @@ describe("queryConversation", () => {
       });
 
       const entries = await queryConversation({
+        profileId: "agent@example.test",
         sender: "alice@example.com",
         messagesDir,
         limit: 1

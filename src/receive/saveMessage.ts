@@ -1,8 +1,10 @@
 import { access, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AddressObject } from "mailparser";
-import type { SavedAttachmentMetadata, SavedMessageMetadata } from "../types";
+import type { SavedAddressFields, SavedAttachmentMetadata, SavedMessageMetadata } from "../types";
 import { MESSAGES_DIR } from "../config/paths";
+import { extractEmailsFromAddressList, normalizeEmail } from "../mail/address";
+import { normalizeMessageIdList } from "../mail/session";
 
 export interface ParsedAttachmentLike {
   filename?: string | null;
@@ -13,6 +15,8 @@ export interface ParsedAttachmentLike {
 
 export interface ParsedMailLike {
   messageId?: string | null;
+  inReplyTo?: string | null;
+  references?: string[] | string | null;
   subject?: string | null;
   date?: Date | null;
   text?: string | false | null;
@@ -21,10 +25,14 @@ export interface ParsedMailLike {
   to?: AddressObject | AddressObject[] | null;
   cc?: AddressObject | AddressObject[] | null;
   bcc?: AddressObject | AddressObject[] | null;
+  replyTo?: AddressObject | AddressObject[] | null;
   attachments?: ParsedAttachmentLike[];
 }
 
 export interface SaveMessageInput {
+  profileId: string;
+  accountEmail: string;
+  mailbox: string;
   uid: number;
   raw: Buffer;
   parsed: ParsedMailLike;
@@ -64,6 +72,27 @@ function formatAddress(addressObject?: AddressObject | AddressObject[] | null): 
       return entry.address ?? entry.name ?? null;
     })
     .filter((entry): entry is string => Boolean(entry));
+}
+
+function formatAddressFields(parsed: ParsedMailLike): SavedAddressFields {
+  const from = formatAddress(parsed.from);
+  const to = formatAddress(parsed.to);
+  const cc = formatAddress(parsed.cc);
+  const bcc = formatAddress(parsed.bcc);
+  const replyTo = formatAddress(parsed.replyTo);
+
+  return {
+    from,
+    fromEmails: extractEmailsFromAddressList(from),
+    to,
+    toEmails: extractEmailsFromAddressList(to),
+    cc,
+    ccEmails: extractEmailsFromAddressList(cc),
+    bcc,
+    bccEmails: extractEmailsFromAddressList(bcc),
+    replyTo,
+    replyToEmails: extractEmailsFromAddressList(replyTo)
+  };
 }
 
 async function pathExists(filePath: string): Promise<boolean> {
@@ -164,17 +193,28 @@ export async function saveMessage(input: SaveMessageInput, messagesDir = MESSAGE
     });
   }
 
-  const recipients = [
-    ...formatAddress(input.parsed.to),
-    ...formatAddress(input.parsed.cc),
-    ...formatAddress(input.parsed.bcc)
-  ];
+  const addressFields = formatAddressFields(input.parsed);
+  const normalizedSenderEmail = addressFields.fromEmails[0] ?? null;
 
   const metadata: SavedMessageMetadata = {
+    profileId: input.profileId,
+    accountEmail: input.accountEmail,
+    mailbox: input.mailbox,
     uid: input.uid,
     messageId: input.parsed.messageId ?? null,
-    from: formatAddress(input.parsed.from),
-    to: recipients,
+    inReplyTo: input.parsed.inReplyTo ?? null,
+    references: normalizeMessageIdList(input.parsed.references),
+    normalizedSenderEmail: normalizedSenderEmail ? normalizeEmail(normalizedSenderEmail) : null,
+    from: addressFields.from,
+    fromEmails: addressFields.fromEmails,
+    to: addressFields.to,
+    toEmails: addressFields.toEmails,
+    cc: addressFields.cc,
+    ccEmails: addressFields.ccEmails,
+    bcc: addressFields.bcc,
+    bccEmails: addressFields.bccEmails,
+    replyTo: addressFields.replyTo,
+    replyToEmails: addressFields.replyToEmails,
     subject: input.parsed.subject ?? null,
     date: input.parsed.date ? input.parsed.date.toISOString() : null,
     flags: input.flags,

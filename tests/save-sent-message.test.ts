@@ -23,20 +23,29 @@ describe("saveSentMessage", () => {
 
       const result = await saveSentMessage(
         {
+          profileId: "agent@example.test",
+          accountEmail: "agent@example.test",
           messageId: "sent-1",
-          from: "agent@marvinkleinpass.dev",
+          from: "agent@example.test",
           to: ["alice@example.com"],
           cc: [],
           bcc: [],
+          replyTo: [],
           subject: "Reply",
           text: "Hello",
+          inReplyTo: "<in-reply-to@example.com>",
+          references: ["<ref-1@example.com>", "<ref-2@example.com>"],
           attachmentPaths: [firstAttachment, secondAttachment]
         },
         sentDir
       );
 
+      expect(result.metadata.profileId).toBe("agent@example.test");
       expect(result.metadata.messageId).toBe("sent-1");
       expect(result.metadata.to).toEqual(["alice@example.com"]);
+      expect(result.metadata.toEmails).toEqual(["alice@example.com"]);
+      expect(result.metadata.inReplyTo).toBe("<in-reply-to@example.com>");
+      expect(result.metadata.references).toEqual(["<ref-1@example.com>", "<ref-2@example.com>"]);
       expect(result.metadata.attachments.length).toBe(2);
       expect(result.metadata.attachments[0].filename).toBe("file.txt");
       expect(result.metadata.attachments[1].filename).toBe("file(1).txt");

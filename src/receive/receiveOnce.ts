@@ -6,10 +6,17 @@ import { loadMailEnvConfig } from "../config/env";
 import { DEFAULT_POLLING_CONFIG, tryReadPollingConfig } from "../config/polling";
 import { saveMessage } from "./saveMessage";
 import { runOnRecieveHook } from "../hooks/runOnRecieveHook";
+import { recordInboundMessage } from "../storage/database";
 
 export interface ReceiveOnceOptions {
+  profileId?: string;
   mailbox?: string;
   logger?: Logger;
+  envFilePath?: string;
+  pollingFilePath?: string;
+  messagesDir?: string;
+  hookFilePath?: string;
+  databaseFile?: string;
 }
 
 export interface ReceiveOnceResult {
@@ -20,12 +27,15 @@ export interface ReceiveOnceResult {
   failed: number;
 }
 
-export async function resolveMailboxForReceive(explicitMailbox?: string): Promise<string> {
+export async function resolveMailboxForReceive(
+  explicitMailbox?: string,
+  pollingFilePath?: string
+): Promise<string> {
   if (explicitMailbox && explicitMailbox.trim().length > 0) {
     return explicitMailbox;
   }
 
-  const pollingConfig = await tryReadPollingConfig();
+  const pollingConfig = await tryReadPollingConfig(pollingFilePath);
   return pollingConfig?.mailbox ?? DEFAULT_POLLING_CONFIG.mailbox;
 }
 
@@ -71,8 +81,9 @@ async function toBuffer(source: unknown): Promise<Buffer> {
 
 export async function receiveOnce(options: ReceiveOnceOptions = {}): Promise<ReceiveOnceResult> {
   const logger = options.logger ?? consoleLogger;
-  const mailbox = await resolveMailboxForReceive(options.mailbox);
-  const envConfig = await loadMailEnvConfig();
+  const mailbox = await resolveMailboxForReceive(options.mailbox, options.pollingFilePath);
+  const envConfig = await loadMailEnvConfig(options.envFilePath);
+  const profileId = options.profileId ?? "default";
 
   const imapClient = new ImapFlow({
     host: envConfig.imap.host,
@@ -127,17 +138,47 @@ export async function receiveOnce(options: ReceiveOnceOptions = {}): Promise<Rec
         }
 
         const saveResult = await saveMessage({
+          profileId,
+          accountEmail: envConfig.email,
+          mailbox,
           uid,
           raw: rawBuffer,
           parsed: parsedMessage,
           flags: normalizeFlags(fetchedMessage.flags)
-        });
+        }, options.messagesDir);
+
+        recordInboundMessage(
+          {
+            profileId,
+            accountEmail: envConfig.email,
+            uid,
+            peerEmail:
+              saveResult.metadata.normalizedSenderEmail ??
+              saveResult.metadata.fromEmails[0] ??
+              "",
+            messageId: saveResult.metadata.messageId,
+            inReplyTo: saveResult.metadata.inReplyTo,
+            references: saveResult.metadata.references,
+            savedAt: saveResult.metadata.savedAt,
+            messageDir: saveResult.messageDir,
+            metadata: saveResult.metadata
+          },
+          options.databaseFile
+        );
+
+        await imapClient.messageFlagsAdd(sequenceId, ["\\Seen"]);
+        saved += 1;
+        seenMarked += 1;
 
         try {
           const hookResult = await runOnRecieveHook({
+            profileId,
+            accountEmail: envConfig.email,
             mailbox,
             messageDir: saveResult.messageDir,
             metadata: saveResult.metadata
+          }, {
+            hookFilePath: options.hookFilePath
           });
 
           if (hookResult.executed) {
@@ -147,10 +188,6 @@ export async function receiveOnce(options: ReceiveOnceOptions = {}): Promise<Rec
           const hookErrorMessage = error instanceof Error ? error.message : String(error);
           logger.warn(`Hook failed for message uid=${uid}: ${hookErrorMessage}`);
         }
-
-        await imapClient.messageFlagsAdd(sequenceId, ["\\Seen"]);
-        saved += 1;
-        seenMarked += 1;
       } catch (error) {
         failed += 1;
         const message = error instanceof Error ? error.message : String(error);

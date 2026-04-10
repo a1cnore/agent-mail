@@ -1,39 +1,27 @@
-import { readdir, readFile } from "node:fs/promises";
+import { access, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
-import { z } from "zod";
-import { MESSAGES_DIR, SENT_MESSAGES_DIR } from "../config/paths";
+import { AGENTMAIL_DATABASE_FILE, MESSAGES_DIR, SENT_MESSAGES_DIR } from "../config/paths";
 import { addressListContainsEmail, normalizeEmail } from "../mail/address";
+import { deriveMailSessionId } from "../mail/session";
+import {
+  queryConversationBySession as queryConversationBySessionDb
+} from "../storage/database";
+import {
+  normalizeSavedMessageMetadata,
+  normalizeSavedSentMessageMetadata
+} from "../storage/metadata";
 import type { ConversationEntry } from "../types";
 
 export interface QueryConversationOptions {
-  sender: string;
+  profileId: string;
+  sender?: string;
+  sessionId?: string;
   includeSent?: boolean;
   limit?: number;
   messagesDir?: string;
   sentMessagesDir?: string;
+  databaseFile?: string;
 }
-
-const receivedMetadataSchema = z.object({
-  messageId: z.string().nullable(),
-  from: z.array(z.string()),
-  to: z.array(z.string()),
-  subject: z.string().nullable(),
-  date: z.string().nullable(),
-  savedAt: z.string(),
-  attachments: z.array(z.unknown())
-});
-
-const sentMetadataSchema = z.object({
-  messageId: z.string().nullable(),
-  from: z.array(z.string()),
-  to: z.array(z.string()),
-  cc: z.array(z.string()),
-  bcc: z.array(z.string()),
-  subject: z.string().nullable(),
-  date: z.string().nullable(),
-  savedAt: z.string(),
-  attachments: z.array(z.unknown())
-});
 
 function sortByConversationDate(entries: ConversationEntry[]): ConversationEntry[] {
   return entries.sort((left, right) => {
@@ -60,6 +48,15 @@ function sortByConversationDate(entries: ConversationEntry[]): ConversationEntry
   });
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function listSubdirectories(baseDir: string): Promise<string[]> {
   try {
     const entries = await readdir(baseDir, { withFileTypes: true });
@@ -83,30 +80,39 @@ async function readJsonFile(filePath: string): Promise<unknown | null> {
   }
 }
 
-async function queryReceivedMessages(sender: string, messagesDir: string): Promise<ConversationEntry[]> {
+async function queryReceivedMessagesLegacy(
+  sender: string,
+  profileId: string,
+  messagesDir: string
+): Promise<ConversationEntry[]> {
   const messageDirs = await listSubdirectories(messagesDir);
   const entries: ConversationEntry[] = [];
 
   for (const messageDir of messageDirs) {
-    const metadataPath = path.join(messageDir, "metadata.json");
-    const rawMetadata = await readJsonFile(metadataPath);
-    const parsedMetadata = receivedMetadataSchema.safeParse(rawMetadata);
+    const rawMetadata = await readJsonFile(path.join(messageDir, "metadata.json"));
+    const metadata = normalizeSavedMessageMetadata(rawMetadata, {
+      profileId,
+      accountEmail: "",
+      mailbox: "INBOX"
+    });
 
-    if (!parsedMetadata.success) {
-      continue;
-    }
-
-    const metadata = parsedMetadata.data;
-    if (!addressListContainsEmail(metadata.from, sender)) {
+    if (!metadata || !addressListContainsEmail(metadata.from, sender)) {
       continue;
     }
 
     entries.push({
       direction: "received",
+      profileId: metadata.profileId,
+      sessionId: deriveMailSessionId(profileId, sender),
       messageId: metadata.messageId,
       from: metadata.from,
       to: metadata.to,
+      cc: metadata.cc,
+      bcc: metadata.bcc,
+      replyTo: metadata.replyTo,
       subject: metadata.subject,
+      inReplyTo: metadata.inReplyTo,
+      references: metadata.references,
       date: metadata.date,
       savedAt: metadata.savedAt,
       messageDir
@@ -116,20 +122,25 @@ async function queryReceivedMessages(sender: string, messagesDir: string): Promi
   return entries;
 }
 
-async function querySentMessages(sender: string, sentMessagesDir: string): Promise<ConversationEntry[]> {
+async function querySentMessagesLegacy(
+  sender: string,
+  profileId: string,
+  sentMessagesDir: string
+): Promise<ConversationEntry[]> {
   const messageDirs = await listSubdirectories(sentMessagesDir);
   const entries: ConversationEntry[] = [];
 
   for (const messageDir of messageDirs) {
-    const metadataPath = path.join(messageDir, "metadata.json");
-    const rawMetadata = await readJsonFile(metadataPath);
-    const parsedMetadata = sentMetadataSchema.safeParse(rawMetadata);
+    const rawMetadata = await readJsonFile(path.join(messageDir, "metadata.json"));
+    const metadata = normalizeSavedSentMessageMetadata(rawMetadata, {
+      profileId,
+      accountEmail: ""
+    });
 
-    if (!parsedMetadata.success) {
+    if (!metadata) {
       continue;
     }
 
-    const metadata = parsedMetadata.data;
     const isRecipientMatch =
       addressListContainsEmail(metadata.to, sender) ||
       addressListContainsEmail(metadata.cc, sender) ||
@@ -141,12 +152,17 @@ async function querySentMessages(sender: string, sentMessagesDir: string): Promi
 
     entries.push({
       direction: "sent",
+      profileId: metadata.profileId,
+      sessionId: deriveMailSessionId(profileId, sender),
       messageId: metadata.messageId,
       from: metadata.from,
       to: metadata.to,
       cc: metadata.cc,
       bcc: metadata.bcc,
+      replyTo: metadata.replyTo,
       subject: metadata.subject,
+      inReplyTo: metadata.inReplyTo,
+      references: metadata.references,
       date: metadata.date,
       savedAt: metadata.savedAt,
       messageDir
@@ -157,15 +173,36 @@ async function querySentMessages(sender: string, sentMessagesDir: string): Promi
 }
 
 export async function queryConversation(options: QueryConversationOptions): Promise<ConversationEntry[]> {
-  const sender = normalizeEmail(options.sender);
+  const databaseFile = options.databaseFile ?? AGENTMAIL_DATABASE_FILE;
+  const includeSent = options.sessionId ? true : Boolean(options.includeSent);
+  const requestedSessionId =
+    options.sessionId ??
+    (options.sender ? deriveMailSessionId(options.profileId, normalizeEmail(options.sender)) : null);
 
-  const receivedEntries = await queryReceivedMessages(sender, options.messagesDir ?? MESSAGES_DIR);
-  const sentEntries = options.includeSent
-    ? await querySentMessages(sender, options.sentMessagesDir ?? SENT_MESSAGES_DIR)
+  if (requestedSessionId && (await fileExists(databaseFile))) {
+    const entries = queryConversationBySessionDb(requestedSessionId, options.limit, databaseFile);
+    const filteredEntries = includeSent ? entries : entries.filter((entry) => entry.direction === "received");
+
+    if (filteredEntries.length > 0 || options.sessionId) {
+      return filteredEntries;
+    }
+  }
+
+  if (!options.sender) {
+    return [];
+  }
+
+  const sender = normalizeEmail(options.sender);
+  const receivedEntries = await queryReceivedMessagesLegacy(
+    sender,
+    options.profileId,
+    options.messagesDir ?? MESSAGES_DIR
+  );
+  const sentEntries = includeSent
+    ? await querySentMessagesLegacy(sender, options.profileId, options.sentMessagesDir ?? SENT_MESSAGES_DIR)
     : [];
 
   const merged = sortByConversationDate([...receivedEntries, ...sentEntries]);
-
   if (typeof options.limit === "number") {
     return merged.slice(0, options.limit);
   }

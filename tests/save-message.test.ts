@@ -16,6 +16,9 @@ describe("saveMessage", () => {
       const raw = Buffer.from("From: sender@example.com\nTo: user@example.com\n\nHello", "utf8");
       const result = await saveMessage(
         {
+          profileId: "agent@example.test",
+          accountEmail: "agent@example.test",
+          mailbox: "INBOX",
           uid: 42,
           raw,
           flags: ["\\Recent"],
@@ -50,6 +53,11 @@ describe("saveMessage", () => {
         tempRoot
       );
 
+      expect(result.metadata.profileId).toBe("agent@example.test");
+      expect(result.metadata.accountEmail).toBe("agent@example.test");
+      expect(result.metadata.mailbox).toBe("INBOX");
+      expect(result.metadata.fromEmails).toEqual(["sender@example.com"]);
+      expect(result.metadata.toEmails).toEqual(["user@example.com"]);
       expect(result.metadata.attachments.length).toBe(2);
       expect(result.metadata.attachments[0].filename).toBe("report.pdf");
       expect(result.metadata.attachments[1].filename).toBe("report(1).pdf");

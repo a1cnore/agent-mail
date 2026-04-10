@@ -4,27 +4,26 @@ export function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function extractEmailsFromAddress(value: string): string[] {
-  const matches = value.match(EMAIL_REGEX) ?? [];
-
+export function dedupeNormalizedEmails(values: string[]): string[] {
   const deduped = new Set<string>();
-  for (const match of matches) {
-    deduped.add(normalizeEmail(match));
+  for (const value of values) {
+    const normalized = normalizeEmail(value);
+    if (normalized.length > 0) {
+      deduped.add(normalized);
+    }
   }
 
   return [...deduped];
 }
 
+export function extractEmailsFromAddress(value: string): string[] {
+  const matches = value.match(EMAIL_REGEX) ?? [];
+
+  return dedupeNormalizedEmails(matches);
+}
+
 export function extractEmailsFromAddressList(values: string[]): string[] {
-  const deduped = new Set<string>();
-
-  for (const value of values) {
-    for (const extracted of extractEmailsFromAddress(value)) {
-      deduped.add(extracted);
-    }
-  }
-
-  return [...deduped];
+  return dedupeNormalizedEmails(values.flatMap((value) => extractEmailsFromAddress(value)));
 }
 
 export function addressListContainsEmail(values: string[], targetEmail: string): boolean {

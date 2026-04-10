@@ -1,42 +1,194 @@
-# AgentMail CLI
+# AgentMail
 
-A CLI for sending mail via SMTP and receiving mail via IMAP polling.
+AgentMail is a local mail runtime for agents. It sends mail via SMTP, polls IMAP inboxes, stores raw mail on disk, indexes conversations in SQLite, and can bridge inbound mail into OpenClaw for automated handling.
 
-## Features
+## What Exists Today
 
-- Reads config from `~/.agentmail/.env`
-- Sends mail with `nodemailer`
-- Polls IMAP inbox with `imapflow`
-- Saves each received message and attachments to `~/.agentmail/messages`
-- Saves sent messages locally to `~/.agentmail/sent`
-- Supports one-shot receive and long-running watch polling
-- Supports conversation queries by sender with optional sent-message merge
-- Supports receive hook script execution on every newly saved incoming mail
+- Profile-scoped mailbox config under `~/.agentmail/profiles/<profile>/`
+- Shared SQLite index at `~/.agentmail/agentmail.db`
+- Local persistence for inbound mail, outbound mail, attachments, and metadata
+- IMAP polling with one-shot and long-running watch modes
+- Receive hooks that run after each newly saved inbound message
+- Conversation lookup by sender or session
+- A shared OpenClaw dispatch bridge for handing inbound mail to agents
+- macOS `launchd` helpers for watchers and the dispatcher
+- A local inbox web UI for conversations, queue state, bridge logs, and config editing
 
-## Bundled Version (Recommended)
+## Architecture
 
-Use the setup script to install the bundled binary (`agentmail`) with no runtime command needed after install.
+### 1. Profiles and Storage
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/a1cnore/agent-mail/main/setup.sh | bash
+Each mailbox lives in an AgentMail profile.
+
+- Default profile: `~/.agentmail/*`
+- Named profile: `~/.agentmail/profiles/<profile>/*`
+- Shared database: `~/.agentmail/agentmail.db`
+
+Per profile, AgentMail keeps:
+
+- `.env` with SMTP and IMAP credentials
+- `polling.json` with mailbox and interval
+- `messages/` for inbound mail
+- `sent/` for outbound mail
+- `hooks/on_recieve.sh`
+- `receive-watch.lock`
+
+### 2. Receive Pipeline
+
+`agentmail receive once` and `agentmail receive watch` do the same core work:
+
+1. Load profile credentials from `.env`
+2. Poll the configured IMAP mailbox for unseen messages
+3. Save each message locally as:
+   - `raw.eml`
+   - `body.txt`
+   - `body.html`
+   - `attachments/*`
+   - `metadata.json`
+4. Insert or update the shared SQLite index
+5. Mark the IMAP message as seen
+6. Run `hooks/on_recieve.sh` if present
+
+Inbound mail is indexed into a stable local session id:
+
+```text
+mail:<profileId>:<sha1(normalized-sender)>
 ```
 
-Installer behavior:
+### 3. Send Pipeline
 
-- Clones/updates repo at `~/.local/src/agentmail`
-- Builds bundled binary `dist/agentmail`
-- Installs to `~/.local/bin/agentmail`
-- Adds `~/.local/bin` to PATH (if needed)
-- Creates `~/.agentmail/.env` from `.env.example` if missing
+`agentmail send` sends mail through SMTP and also writes a local sent-message copy into the profile's `sent/` directory. Outbound mail is indexed into the same SQLite session graph so local conversation history stays complete.
 
-If repo is already cloned:
+Reply threading is preserved through:
+
+- `In-Reply-To`
+- `References`
+- sender/session matching in the local index
+
+### 4. OpenClaw Bridge
+
+The bridge is the shared dispatcher that turns newly indexed inbound mail into OpenClaw turns.
+
+Flow:
+
+1. `receiveOnce()` saves the inbound message and records it in SQLite with dispatch status `pending`
+2. `agentmail dispatch run` or `agentmail dispatch once` loads the shared bridge config from `~/.openclaw/mail-dispatch/config.json`
+3. The dispatcher claims pending or failed rows from SQLite
+4. It builds an OpenClaw payload from:
+   - sender/recipient metadata
+   - subject and threading headers
+   - attachment list and saved file paths
+   - local message directory
+   - body text or stripped HTML fallback
+5. It sends the turn into OpenClaw with:
+
+```bash
+openclaw gateway call chat.send --json --timeout 20000 --params '{...}'
+```
+
+OpenClaw session isolation is explicit and per sender:
+
+```text
+agent:<agentId>:mail:<normalized-sender-email>
+```
+
+That means one mailbox profile can be bound to one agent, while each external sender still gets their own OpenClaw session stream.
+
+### 5. Optional Workspace Automation
+
+If the bound OpenClaw agent workspace contains all of the following files, AgentMail switches from a generic "reply with agentmail" prompt to the structured sales automation flow:
+
+- `prose/inbound_intake.prose`
+- `lobster/reply_guarded_send.lobster.yaml`
+- `lobster/no_reply.lobster.yaml`
+- `scripts/agentmail_reply_guard.py`
+
+When that automation stack exists, AgentMail writes:
+
+- `openclaw-inbound-context.json`
+- `sales_work_item.json`
+
+into the saved message directory and instructs the agent to use the guarded Lobster flow instead of calling `agentmail send` directly.
+
+If those workspace files do not exist, the bridge falls back to direct reply instructions using `agentmail --profile <profile> send ...`.
+
+### 6. Operations Layer
+
+- Bridge log: `~/.agentmail/logs/bridge.log`
+- Receive logs: `~/.agentmail/logs/receive-<profile>.log`
+- Dispatcher log: `~/.agentmail/logs/dispatch.log`
+- Dispatcher health check: `agentmail dispatch doctor`
+- Queue status: `agentmail dispatch status --verbose`
+- Deadletter or failed retry: `agentmail dispatch retry --include-deadletter`
+
+Retry schedule for failed dispatches:
+
+- 1 minute
+- 5 minutes
+- 15 minutes
+- 60 minutes
+- then `deadletter`
+
+### 7. Inbox UI
+
+`agentmail inbox` starts a local HTTP server that exposes:
+
+- profiles and sessions
+- message bodies and attachments
+- dispatch queue state
+- bridge logs
+- OpenClaw mail sessions
+- dispatch bindings
+- service status
+- profile env editing
+- polling config editing
+- hook editing
+
+The helper script `./start-ui.sh` can run that UI in the foreground or background.
+
+## New Machine Setup
+
+### Prerequisites
+
+- `git`
+- `bun`
+- an IMAP/SMTP mailbox
+- `openclaw` CLI if you want the bridge
+- macOS if you want `agentmail service install` (`launchd` only)
+
+Recommended check:
+
+```bash
+git --version
+bun --version
+openclaw --help
+```
+
+### Install AgentMail
+
+Recommended install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/a1cnore/agent-mail/master/setup.sh | bash
+```
+
+What `setup.sh` does:
+
+- clones or updates the repo into `~/.local/src/agent-mail`
+- runs `bun install`
+- builds `dist/agentmail`
+- installs `~/.local/bin/agentmail`
+- adds `~/.local/bin` to `PATH` when needed
+- creates `~/.agentmail/.env` from `.env.example` if missing
+
+If you already have a local checkout:
 
 ```bash
 cd /path/to/agent-mail
 ./setup-local.sh
 ```
 
-## Manual Build (Bundled Binary)
+Manual build:
 
 ```bash
 bun install
@@ -44,53 +196,165 @@ bun run build:standalone
 ./dist/agentmail --help
 ```
 
-## Configuration
+### Create a Mailbox Profile
 
-Create `~/.agentmail/.env` with:
-
-- `AGENTMAIL_EMAIL`
-- `SMTP_HOST`
-- `SMTP_PORT`
-- `SMTP_SECURE`
-- `SMTP_USER`
-- `SMTP_PASS`
-- `IMAP_HOST`
-- `IMAP_PORT`
-- `IMAP_SECURE`
-- `IMAP_USER`
-- `IMAP_PASS`
-
-Template source: `.env.example`
-
-## Quick Usage
+Create a profile and write its `.env` and `polling.json` in one step:
 
 ```bash
-agentmail config validate
-agentmail receive setup --mailbox INBOX --interval 60
-agentmail receive watch
-agentmail conversation --sender "alice@example.com" --include-sent
+agentmail account create \
+  --name work \
+  --email you@example.com \
+  --smtp-host smtp.example.com \
+  --smtp-port 465 \
+  --smtp-secure true \
+  --smtp-user you@example.com \
+  --smtp-pass 'smtp-password' \
+  --imap-host imap.example.com \
+  --imap-port 993 \
+  --imap-secure true \
+  --imap-user you@example.com \
+  --imap-pass 'imap-password' \
+  --mailbox INBOX \
+  --interval 60
 ```
+
+If you want the profile bound to an OpenClaw agent immediately:
+
+```bash
+agentmail account create \
+  --name work \
+  --email you@example.com \
+  --smtp-host smtp.example.com \
+  --smtp-user you@example.com \
+  --smtp-pass 'smtp-password' \
+  --imap-host imap.example.com \
+  --imap-user you@example.com \
+  --imap-pass 'imap-password' \
+  --agent sales \
+  --dispatch-config ~/.openclaw/mail-dispatch/config.json
+```
+
+Validate the result:
+
+```bash
+agentmail --profile work config validate
+```
+
+### Configure the OpenClaw Bridge
+
+The bridge needs two things:
+
+1. a profile-to-agent binding in `~/.openclaw/mail-dispatch/config.json`
+2. a working OpenClaw installation that can accept `chat.send`
+
+Create or update the binding manually:
+
+```bash
+agentmail dispatch bind --account work --agent sales
+```
+
+The dispatcher config looks like this:
+
+```json
+{
+  "accounts": {
+    "work": {
+      "agentId": "sales",
+      "enabled": true
+    }
+  },
+  "worker": {
+    "pollIntervalMs": 1000,
+    "maxConcurrentSessions": 4
+  }
+}
+```
+
+AgentMail reads OpenClaw runtime details from `~/.openclaw/openclaw.json`. The important fields are:
+
+- `gateway.port`
+- `gateway.auth.token`
+- `agents.list[].id`
+- `agents.list[].workspace`
+
+The workspace path is what enables the optional Lobster/prose automation stack described above.
+
+### Smoke Test the Bridge
+
+Use this sequence on a fresh machine:
+
+```bash
+agentmail --profile work receive once
+agentmail dispatch once
+agentmail dispatch status --verbose
+agentmail dispatch doctor
+```
+
+What you should see:
+
+- inbound mail saved into `~/.agentmail/profiles/work/messages/...`
+- a row in SQLite with dispatch state updates
+- bridge log entries in `~/.agentmail/logs/bridge.log`
+- `dispatch doctor` reporting a valid env, polling config, binding, and watcher state
+
+### Run It Continuously
+
+Manual mode:
+
+```bash
+agentmail --profile work receive watch
+agentmail dispatch run
+```
+
+macOS `launchd` mode:
+
+```bash
+agentmail service install
+agentmail service status
+```
+
+`service install` creates:
+
+- one watcher LaunchAgent per configured profile
+- one shared dispatcher LaunchAgent
+
+Everything is written under `~/Library/LaunchAgents/`.
+
+### Start the Inbox UI
+
+Foreground:
+
+```bash
+agentmail inbox --hostname 127.0.0.1 --port 8025
+```
+
+Background helper:
+
+```bash
+./start-ui.sh --background
+```
+
+Then open `http://127.0.0.1:8025`.
 
 ## Command Reference
 
-### `agentmail` (top-level)
+### Top Level
 
 ```bash
-agentmail [options] [command]
+agentmail [--profile <name>] <command>
 ```
-
-Options:
-
-- `-V, --version`
-- `-h, --help`
 
 Commands:
 
-- `send [options]`
+- `send`
+- `account`
 - `receive`
 - `config`
-- `conversation [options]`
-- `help [command]`
+- `index`
+- `conversation`
+- `dispatch`
+- `service`
+- `inbox`
 
 ### `agentmail send`
 
@@ -98,212 +362,154 @@ Commands:
 agentmail send --to <list> --subject <text> [options]
 ```
 
-Options:
+Key options:
 
-- `--to <list>` (required): comma-separated recipient addresses
-- `--subject <text>` (required): message subject
-- `--cc <list>`: comma-separated cc addresses
-- `--bcc <list>`: comma-separated bcc addresses
-- `--text <text>`: plain-text body
-- `--html <html>`: HTML body
-- `--attach <path>`: attachment file path (repeatable)
-- `-h, --help`
-
-Notes:
-
-- At least one of `--text` or `--html` must be provided.
-
-Example:
-
-```bash
-agentmail send \
-  --to "to@example.com,other@example.com" \
-  --subject "Test" \
-  --text "Hello" \
-  --attach ./report.pdf
-```
+- `--cc <list>`
+- `--bcc <list>`
+- `--text <text>`
+- `--html <html>`
+- `--in-reply-to <messageId>`
+- `--references <list>`
+- `--attach <path>`
 
 ### `agentmail receive`
 
 ```bash
-agentmail receive [command]
-```
-
-Subcommands:
-
-- `setup [options]`
-- `once [options]`
-- `watch`
-- `help [command]`
-
-### `agentmail receive setup`
-
-```bash
 agentmail receive setup [--mailbox <name>] [--interval <seconds>]
-```
-
-Options:
-
-- `--mailbox <name>`: IMAP mailbox name (default: `INBOX`)
-- `--interval <seconds>`: polling interval (default: `60`)
-- `-h, --help`
-
-Writes `~/.agentmail/polling.json`.
-
-### `agentmail receive once`
-
-```bash
 agentmail receive once [--mailbox <name>]
-```
-
-Options:
-
-- `--mailbox <name>`: IMAP mailbox name (overrides saved polling mailbox)
-- `-h, --help`
-
-### `agentmail receive watch`
-
-```bash
 agentmail receive watch
+agentmail receive watch-all
 ```
 
-Options:
+Behavior notes:
 
-- `-h, --help`
-
-Behavior:
-
-- Loads polling config from `~/.agentmail/polling.json`
-- Runs receive loop continuously until interrupted (`Ctrl+C`)
-
-### `agentmail config`
-
-```bash
-agentmail config [command]
-```
-
-Subcommands:
-
-- `validate`
-- `help [command]`
-
-### `agentmail config validate`
-
-```bash
-agentmail config validate
-```
-
-Options:
-
-- `-h, --help`
+- `watch` uses the active profile
+- `watch` without `--profile` auto-discovers configured profiles and watches them all
+- `watch-all` is the explicit "all configured profiles" form
 
 ### `agentmail conversation`
 
 ```bash
-agentmail conversation --sender <email> [options]
+agentmail conversation [--sender <email> | --session <id>] [--include-sent] [--json]
 ```
 
-Options:
-
-- `--sender <email>` (required): sender email to query from received mail
-- `--include-sent`: also include locally stored sent messages where recipient matches sender
-- `--limit <count>`: limit number of returned entries
-- `--json`: output machine-readable JSON
-- `-h, --help`
-
-Example:
+### `agentmail index`
 
 ```bash
-agentmail conversation --sender "alice@example.com" --include-sent
+agentmail index rebuild
 ```
 
-## Receive Hook
+Rebuilds the shared SQLite index from saved `messages/` and `sent/` folders.
 
-If this file exists, it is executed for every newly saved incoming message:
-
-- `~/.agentmail/hooks/on_recieve.sh`
-
-This runs for both:
-
-- `agentmail receive once`
-- `agentmail receive watch`
-
-Create hook file:
+### `agentmail dispatch`
 
 ```bash
-mkdir -p ~/.agentmail/hooks
-cat > ~/.agentmail/hooks/on_recieve.sh <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-echo "new mail: $AGENTMAIL_MESSAGE_SUBJECT from $AGENTMAIL_MESSAGE_FROM"
-EOF
-chmod +x ~/.agentmail/hooks/on_recieve.sh
+agentmail dispatch bind --account <name> --agent <id> [--config <path>]
+agentmail dispatch run [--config <path>]
+agentmail dispatch once [--config <path>]
+agentmail dispatch status [--verbose] [--json]
+agentmail dispatch inspect [--account <name>] [--sender <email>] [--status <list>]
+agentmail dispatch retry [--account <name>] [--sender <email>] [--include-deadletter]
+agentmail dispatch doctor [--json]
 ```
 
-Hook environment variables:
+Main operator commands:
 
-- `AGENTMAIL_HOOK_EVENT` (`on_recieve`)
+- `agentmail dispatch status --verbose`
+- `agentmail dispatch doctor`
+
+### `agentmail service`
+
+```bash
+agentmail service install
+agentmail service status
+agentmail service uninstall
+```
+
+This layer is macOS-specific because it shells out to `launchctl`.
+
+### `agentmail inbox`
+
+```bash
+agentmail inbox [--hostname <host>] [--port <port>]
+```
+
+## Receive Hooks
+
+If this file exists, it runs after each newly saved inbound message:
+
+- default profile: `~/.agentmail/hooks/on_recieve.sh`
+- named profile: `~/.agentmail/profiles/<profile>/hooks/on_recieve.sh`
+
+Helper script:
+
+```bash
+./setup-hook.sh
+./setup-hook.sh --profile work
+./setup-hook.sh --all-profiles
+```
+
+Hook environment variables include:
+
+- `AGENTMAIL_HOOK_EVENT`
+- `AGENTMAIL_PROFILE`
+- `AGENTMAIL_ACCOUNT_EMAIL`
 - `AGENTMAIL_MAILBOX`
 - `AGENTMAIL_MESSAGE_UID`
 - `AGENTMAIL_MESSAGE_ID`
 - `AGENTMAIL_MESSAGE_SUBJECT`
 - `AGENTMAIL_MESSAGE_FROM`
 - `AGENTMAIL_MESSAGE_TO`
-- `AGENTMAIL_MESSAGE_SAVED_AT`
-- `AGENTMAIL_MESSAGE_DATE`
-- `AGENTMAIL_MESSAGE_DIR`
+- `AGENTMAIL_MESSAGE_CC`
+- `AGENTMAIL_MESSAGE_REPLY_TO`
 - `AGENTMAIL_MESSAGE_METADATA_FILE`
+- `AGENTMAIL_MESSAGE_DIR`
 
-Notes:
-
-- Hook failures are logged as warnings and do not stop mail processing.
-- The message is still marked as seen after successful local save.
-
-## Setup Script Reference
-
-### `setup.sh`
-
-```bash
-./setup.sh [options]
-```
-
-Options:
-
-- `--repo-url <url>`
-- `--repo-dir <path>`
-- `--clone-dir <path>`
-- `--bin-dir <path>`
-- `--skip-path`
-- `--skip-env-template`
-- `-h, --help`
-
-### `setup-local.sh`
-
-```bash
-./setup-local.sh [options]
-```
-
-Options:
-
-- `--repo-dir <path>`
-- `--bin-dir <path>`
-- `--skip-path`
-- `--skip-env-template`
-- `-h, --help`
+Hook failures are logged as warnings and do not stop receive processing.
 
 ## Local Storage Layout
 
-Received messages are stored under:
+Default profile:
 
-- `~/.agentmail/messages/<timestamp>_uid-<uid>/metadata.json`
-- `~/.agentmail/messages/<timestamp>_uid-<uid>/body.txt`
-- `~/.agentmail/messages/<timestamp>_uid-<uid>/body.html`
-- `~/.agentmail/messages/<timestamp>_uid-<uid>/raw.eml`
-- `~/.agentmail/messages/<timestamp>_uid-<uid>/attachments/*`
+- `~/.agentmail/.env`
+- `~/.agentmail/polling.json`
+- `~/.agentmail/messages/<timestamp>_uid-<uid>/...`
+- `~/.agentmail/sent/<timestamp>_msg-<id>/...`
+- `~/.agentmail/hooks/on_recieve.sh`
+- `~/.agentmail/receive-watch.lock`
 
-Sent messages are stored under:
+Named profile:
 
-- `~/.agentmail/sent/<timestamp>_msg-<id>/metadata.json`
-- `~/.agentmail/sent/<timestamp>_msg-<id>/body.txt`
-- `~/.agentmail/sent/<timestamp>_msg-<id>/body.html`
-- `~/.agentmail/sent/<timestamp>_msg-<id>/attachments/*`
+- `~/.agentmail/profiles/<profile>/.env`
+- `~/.agentmail/profiles/<profile>/polling.json`
+- `~/.agentmail/profiles/<profile>/messages/<timestamp>_uid-<uid>/...`
+- `~/.agentmail/profiles/<profile>/sent/<timestamp>_msg-<id>/...`
+- `~/.agentmail/profiles/<profile>/hooks/on_recieve.sh`
+- `~/.agentmail/profiles/<profile>/receive-watch.lock`
+
+Shared assets:
+
+- `~/.agentmail/agentmail.db`
+- `~/.agentmail/logs/bridge.log`
+- `~/.agentmail/logs/dispatch.log`
+- `~/.openclaw/mail-dispatch/config.json`
+- `~/.openclaw/openclaw.json`
+
+## Development
+
+```bash
+bun install
+bun run typecheck
+bun test
+```
+
+## Public Repo Hygiene
+
+Do not commit:
+
+- mailbox credentials
+- `~/.agentmail/`
+- `~/.openclaw/`
+- generated local caches
+- local log files
+- local SQLite files

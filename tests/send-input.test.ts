@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { parseAddressList, parseSendMailInput } from "../src/send/sendMail";
+import { parseAddressList, parseReferencesList, parseSendMailInput } from "../src/send/sendMail";
 
 describe("send input helpers", () => {
   it("parses comma-separated addresses", () => {
@@ -26,5 +26,12 @@ describe("send input helpers", () => {
     });
 
     expect(accepted.subject).toBe("Hello");
+  });
+
+  it("parses references header values", () => {
+    expect(parseReferencesList("<a@example.com>, <b@example.com>")).toEqual([
+      "<a@example.com>",
+      "<b@example.com>"
+    ]);
   });
 });

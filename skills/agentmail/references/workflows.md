@@ -1,16 +1,18 @@
 # AgentMail Workflows
 
+For named-profile workflows, prepend commands with `--profile <name>` (for example `agentmail --profile work ...`) and use profile storage under `~/.agentmail/profiles/<name>/`.
+
 ## 1) First-Time Setup And Validation
 
 1. Ensure `agentmail` binary is available.
 ```bash
 agentmail --help
 ```
-2. Create config directory and env file.
+2. Create config directory and env file (default profile shown).
 ```bash
 mkdir -p ~/.agentmail
 ```
-3. Populate `~/.agentmail/.env` with required keys (see `config-and-storage.md`).
+3. Populate active profile `.env` with required keys (see `config-and-storage.md`).
 4. Validate configuration before operational commands.
 ```bash
 agentmail config validate
@@ -46,6 +48,10 @@ agentmail receive setup --mailbox INBOX --interval 60
 ```bash
 cat ~/.agentmail/polling.json
 ```
+For named profile `work`:
+```bash
+cat ~/.agentmail/profiles/work/polling.json
+```
 
 ## 4) Receive Once
 
@@ -65,6 +71,10 @@ agentmail receive once --mailbox Support
 ```bash
 ls -la ~/.agentmail/messages
 ```
+For named profile `work`:
+```bash
+ls -la ~/.agentmail/profiles/work/messages
+```
 
 ## 5) Start And Stop Watch Loop
 
@@ -81,6 +91,10 @@ agentmail receive watch
 ```bash
 ls -la ~/.agentmail/receive-watch.lock
 ```
+For named profile `work`:
+```bash
+ls -la ~/.agentmail/profiles/work/receive-watch.lock
+```
 
 ## 6) Configure Receive Hook
 
@@ -93,6 +107,16 @@ set -euo pipefail
 echo "new mail: $AGENTMAIL_MESSAGE_SUBJECT from $AGENTMAIL_MESSAGE_FROM"
 SH
 chmod +x ~/.agentmail/hooks/on_recieve.sh
+```
+For named profile `work`:
+```bash
+mkdir -p ~/.agentmail/profiles/work/hooks
+cat > ~/.agentmail/profiles/work/hooks/on_recieve.sh <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "new mail: $AGENTMAIL_MESSAGE_SUBJECT from $AGENTMAIL_MESSAGE_FROM"
+SH
+chmod +x ~/.agentmail/profiles/work/hooks/on_recieve.sh
 ```
 2. Trigger hook with one receive cycle.
 ```bash
@@ -118,8 +142,8 @@ agentmail conversation --sender "alice@example.com" --include-sent --limit 10 --
 ## 8) Operational Audit Checklist
 
 - Run `agentmail config validate`.
-- Confirm expected polling values in `~/.agentmail/polling.json`.
+- Confirm expected polling values in active profile `polling.json`.
 - Confirm watcher lock behavior if using continuous polling.
-- Confirm incoming metadata exists under `~/.agentmail/messages/*/metadata.json`.
-- Confirm sent metadata exists under `~/.agentmail/sent/*/metadata.json`.
+- Confirm incoming metadata exists under active profile `messages/*/metadata.json`.
+- Confirm sent metadata exists under active profile `sent/*/metadata.json`.
 - Use conversation query with `--json` for structured checks.
